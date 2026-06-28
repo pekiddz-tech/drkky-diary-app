@@ -14,13 +14,13 @@ if not firebase_admin._apps:
             firebase_secrets = dict(st.secrets["firebase"])
             cred = credentials.Certificate(firebase_secrets)
             
-            # 取得 Storage Bucket 名稱
+            # 取得 Storage Bucket 名稱並做自動去雜質處理
             storage_bucket_name = st.secrets.get("firebase_config", {}).get("storage_bucket", "")
+            storage_bucket_name = storage_bucket_name.replace("gs://", "").strip()
             
             firebase_admin.initialize_app(cred, {
                 'storageBucket': storage_bucket_name
             })
-        else:
             st.warning("尚未設定 Firebase Secrets 金鑰。")
     except Exception as e:
         st.error(f"Firebase 初始化失敗：{e}")
