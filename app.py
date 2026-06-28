@@ -8,12 +8,8 @@ import uuid
 # ==========================================
 # 0. 初始化 Firebase (雲端資料庫)
 # ==========================================
-# 確保 Firebase 應用程式只初始化一次
 if not firebase_admin._apps:
     try:
-        # 從 Streamlit Secrets 讀取 Firebase 金鑰
-        # 注意：在本機測試時，需要在專案資料夾建立 .streamlit/secrets.toml
-        # 部署到 Streamlit Cloud 時，則貼在 Advanced Settings 的 Secrets 中
         if "firebase" in st.secrets:
             firebase_secrets = dict(st.secrets["firebase"])
             cred = credentials.Certificate(firebase_secrets)
@@ -29,7 +25,6 @@ if not firebase_admin._apps:
     except Exception as e:
         st.error(f"Firebase 初始化失敗：{e}")
 
-# 取得 Firestore 資料庫連線
 try:
     db = firestore.client()
 except:
@@ -65,7 +60,6 @@ existing_images_urls = []
 
 if db:
     try:
-        # 嘗試從 Firestore 讀取該日期的文件
         doc_ref = db.collection(u'diaries').document(date_str_filename)
         doc = doc_ref.get()
         
@@ -76,7 +70,6 @@ if db:
     except Exception as e:
         st.error(f"讀取資料庫失敗：{e}")
 
-# 主畫面標題
 st.title("☁️ DRKKY 的雲端日記")
 st.subheader(f"📅 {date_str_formatted}")
 
@@ -90,22 +83,18 @@ diary_text = st.text_area(
     placeholder="紀錄今天發生的趣事、心情或心得..."
 )
 
-# 顯示已儲存的雲端圖片
 if existing_images_urls:
     st.write("📸 **今日已儲存的圖片：**")
     cols = st.columns(3)
     for i, img_url in enumerate(existing_images_urls):
-        # 顯示 Firebase Storage 提供的公開網址
         cols[i % 3].image(img_url, use_container_width=True)
     
-    # 雲端版簡化操作，提供一鍵清除今日所有紀錄
     if st.button("🗑️ 清除今日所有紀錄", key="clear_all_btn"):
         if db:
             doc_ref.delete()
             st.success("今日紀錄已從雲端清除！")
             st.rerun()
 
-# 圖片上傳區域
 st.write("---")
 uploaded_images = st.file_uploader("新增圖片 (將上傳至雲端)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
@@ -134,43 +123,40 @@ if save_btn:
         st.error("無法連線至雲端資料庫，請檢查 Firebase 金鑰設定。")
     elif diary_text.strip() or uploaded_images or existing_images_urls:
         new_image_urls = []
+        has_error = False  # 錯誤攔截器
         
-        # 處理圖片上傳至 Firebase Storage
         if uploaded_images:
             with st.spinner('正在上傳圖片至雲端儲存空間...'):
                 try:
                     bucket = storage.bucket()
                     for img_file in uploaded_images:
-                        # 生成雲端唯一檔名
                         file_extension = img_file.name.split('.')[-1]
                         unique_filename = f"diaries/{date_str_filename}_{uuid.uuid4().hex[:8]}.{file_extension}"
                         
                         blob = bucket.blob(unique_filename)
-                        # 將檔案上傳
                         blob.upload_from_string(img_file.getvalue(), content_type=img_file.type)
-                        # 將檔案設為公開，才能在網頁上直接顯示預覽
                         blob.make_public()
                         new_image_urls.append(blob.public_url)
                 except Exception as e:
                     st.error(f"圖片上傳失敗：{e}")
+                    has_error = True 
         
-        # 合併舊圖片與新圖片網址
         all_image_urls = existing_images_urls + new_image_urls
         
-        # 儲存資料到 Firestore
-        with st.spinner('正在儲存日記內容...'):
-            try:
-                doc_ref.set({
-                    u'content': diary_text,
-                    u'image_urls': all_image_urls,
-                    u'updated_at': firestore.SERVER_TIMESTAMP
-                })
-                st.success("✅ 成功儲存至雲端資料庫！")
-            except Exception as e:
-                st.error(f"儲存失敗：{e}")
+        if not has_error:
+            with st.spinner('正在儲存日記內容...'):
+                try:
+                    doc_ref.set({
+                        u'content': diary_text,
+                        u'image_urls': all_image_urls,
+                        u'updated_at': firestore.SERVER_TIMESTAMP
+                    })
+                    st.success("✅ 成功儲存至雲端資料庫！")
+                except Exception as e:
+                    st.error(f"儲存失敗：{e}")
+                    has_error = True
 
-        # 觸發 Google 行事曆同步
-        if sync_to_google:
+        if sync_to_google and not has_error:
             with st.spinner('正在同步到 Google 行事曆...'):
                 calendar_content = diary_text
                 if all_image_urls:
@@ -181,8 +167,10 @@ if save_btn:
                     st.success(f"☁️ 行事曆同步成功！[點此查看]({result})")
                 else:
                     st.error(f"❌ 行事曆同步失敗，錯誤訊息：{result}")
+                    has_error = True
         
-        st.rerun()
+        if not has_error:
+            st.rerun()
     else:
          st.warning("⚠️ 請先輸入內容或選擇圖片再儲存。")
 
@@ -197,7 +185,6 @@ if diary_text:
     
     col_ex1, col_ex2 = st.columns(2)
     
-    # 1. 匯出成純文字 (.txt)
     txt_data = f"日期：{date_str_formatted}\n\n內容：\n{diary_text}"
     col_ex1.download_button(
         label="📄 下載純文字 (.txt)",
@@ -206,7 +193,6 @@ if diary_text:
         mime="text/plain"
     )
     
-    # 2. 匯出成 Word (.docx)
     try:
         from docx import Document
         from io import BytesIO
@@ -216,7 +202,6 @@ if diary_text:
         doc.add_heading(date_str_formatted, level=1)
         doc.add_paragraph(diary_text)
         
-        # 若有雲端圖片，將網址附在文件最後
         if existing_images_urls:
             doc.add_heading('附加圖片連結：', level=2)
             for url in existing_images_urls:
@@ -234,5 +219,4 @@ if diary_text:
     except ImportError:
         col_ex2.warning("💡 請先在 requirements.txt 中加入 `python-docx` 才能啟用 Word 匯出功能。")
         
-    # 3. 關於 PDF 的實用提示
     st.info("💡 **如何將日記存為 PDF？**\n\n由於雲端環境的中文字體限制，最完美的 PDF 儲存方式是：直接按下電腦鍵盤的 `Ctrl + P` (Mac 為 `Cmd + P`)，將目的地選擇為 **「另存為 PDF」**，這樣能 100% 保留網頁上精美的深色排版與圖片喔！")
