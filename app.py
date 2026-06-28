@@ -182,7 +182,7 @@ if save_btn:
                 else:
                     st.error(f"❌ 行事曆同步失敗，錯誤訊息：{result}")
         
-        # st.rerun()
+        st.rerun()
     else:
          st.warning("⚠️ 請先輸入內容或選擇圖片再儲存。")
 
@@ -191,3 +191,48 @@ if save_btn:
 # ==========================================
 if diary_text:
     st.caption(f"✍️ 目前字數：{len(diary_text)} 字")
+    
+    st.write("---")
+    st.write("📥 **匯出與下載**")
+    
+    col_ex1, col_ex2 = st.columns(2)
+    
+    # 1. 匯出成純文字 (.txt)
+    txt_data = f"日期：{date_str_formatted}\n\n內容：\n{diary_text}"
+    col_ex1.download_button(
+        label="📄 下載純文字 (.txt)",
+        data=txt_data,
+        file_name=f"DRKKY_日記_{date_str_filename}.txt",
+        mime="text/plain"
+    )
+    
+    # 2. 匯出成 Word (.docx)
+    try:
+        from docx import Document
+        from io import BytesIO
+        
+        doc = Document()
+        doc.add_heading('DRKKY 的雲端日記', 0)
+        doc.add_heading(date_str_formatted, level=1)
+        doc.add_paragraph(diary_text)
+        
+        # 若有雲端圖片，將網址附在文件最後
+        if existing_images_urls:
+            doc.add_heading('附加圖片連結：', level=2)
+            for url in existing_images_urls:
+                doc.add_paragraph(url)
+                
+        bio = BytesIO()
+        doc.save(bio)
+        
+        col_ex2.download_button(
+            label="📝 下載 Word (.docx)",
+            data=bio.getvalue(),
+            file_name=f"DRKKY_日記_{date_str_filename}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    except ImportError:
+        col_ex2.warning("💡 請先在 requirements.txt 中加入 `python-docx` 才能啟用 Word 匯出功能。")
+        
+    # 3. 關於 PDF 的實用提示
+    st.info("💡 **如何將日記存為 PDF？**\n\n由於雲端環境的中文字體限制，最完美的 PDF 儲存方式是：直接按下電腦鍵盤的 `Ctrl + P` (Mac 為 `Cmd + P`)，將目的地選擇為 **「另存為 PDF」**，這樣能 100% 保留網頁上精美的深色排版與圖片喔！")
