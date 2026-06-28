@@ -195,17 +195,27 @@ if diary_text:
     
     try:
         from docx import Document
+        from docx.shared import Inches
         from io import BytesIO
+        import requests # 需要在 requirements.txt 加入 requests
         
         doc = Document()
         doc.add_heading('DRKKY 的雲端日記', 0)
         doc.add_heading(date_str_formatted, level=1)
         doc.add_paragraph(diary_text)
         
+        # 修改後的圖片處理邏輯
         if existing_images_urls:
-            doc.add_heading('附加圖片連結：', level=2)
+            doc.add_heading('附加圖片：', level=2)
             for url in existing_images_urls:
-                doc.add_paragraph(url)
+                try:
+                    # 1. 從網址下載圖片內容
+                    response = requests.get(url)
+                    image_stream = BytesIO(response.content)
+                    # 2. 將圖片插入 Word，寬度設定為 5 英吋
+                    doc.add_picture(image_stream, width=Inches(5.0))
+                except Exception as e:
+                    doc.add_paragraph(f"無法載入圖片: {url}")
                 
         bio = BytesIO()
         doc.save(bio)
