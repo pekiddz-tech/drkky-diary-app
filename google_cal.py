@@ -1,5 +1,4 @@
 import json
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import streamlit as st
 from google.oauth2 import service_account
@@ -8,19 +7,22 @@ from google.oauth2 import service_account
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
 def get_calendar_service():
-    """從 Streamlit Secrets 讀取 Google 服務帳戶憑證"""
+    """從 Streamlit Secrets 讀取憑證 (直接沿用 Firebase 的金鑰)"""
     try:
-        # 從 st.secrets 中讀取我們設定好的 Google Service Account 資訊
-        # 注意：這裡我們改用 Service Account，而不是原本的 OAuth 用戶端
-        # 因為雲端環境無法跳出瀏覽器讓你點擊「授權」
-        service_account_info = json.loads(st.secrets["google_calendar"]["service_account_json"])
+        # 💡 終極解法：直接沿用已經成功運作的 Firebase 金鑰！
+        # 這樣就不用再去處理那串很容易複製壞掉的 service_account_json 了
+        service_account_info = dict(st.secrets["firebase"])
         
+        # 修正 private_key 中的換行符號 (確保 PEM 格式正確)
+        if "\\n" in service_account_info.get("private_key", ""):
+            service_account_info["private_key"] = service_account_info["private_key"].replace("\\n", "\n")
+
         creds = service_account.Credentials.from_service_account_info(
             service_account_info, scopes=SCOPES
         )
         return build('calendar', 'v3', credentials=creds)
     except Exception as e:
-        st.error(f"行事曆初始化發生內部錯誤，詳細原因：{str(e)}") 
+        st.error(f"行事曆初始化發生內部錯誤，詳細原因：{str(e)}")
         return None
 
 def add_diary_to_calendar(date_str, content):
@@ -37,14 +39,18 @@ def add_diary_to_calendar(date_str, content):
             'end': {'date': date_str},
         }
 
-        # 這裡需要指定你要寫入的行事曆 ID。
-        # 如果使用 Service Account，'primary' 會是指 Service Account 自己的行事曆。
-        # 你必須把你的個人行事曆「共用」給這個 Service Account 的信箱，並給予「有權變更活動」權限。
-        # 然後在這裡填入你的個人 Gmail 信箱作為 calendarId。
+        # 讀取目標行事曆 ID
         calendar_id = st.secrets["google_calendar"]["target_calendar_id"]
 
+        # 寫入事件
         event_result = service.events().insert(calendarId=calendar_id, body=event).execute()
+        
+        # --- 除錯核心 ---
+        st.success(f"同步成功！")
+        st.info(f"事件已寫入行事曆 ID: {calendar_id}")
+        st.info(f"事件 ID: {event_result.get('id')}")
+        
         return True, event_result.get('htmlLink')
         
     except Exception as e:
-        return False, str(e)
+        return False, f"錯誤詳情: {str(e)}"
