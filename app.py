@@ -182,7 +182,7 @@ if save_btn:
                 else:
                     st.error(f"❌ 行事曆同步失敗，錯誤訊息：{result}")
         
-        st.rerun()
+        # st.rerun()
     else:
          st.warning("⚠️ 請先輸入內容或選擇圖片再儲存。")
 
