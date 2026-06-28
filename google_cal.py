@@ -20,7 +20,7 @@ def get_calendar_service():
         )
         return build('calendar', 'v3', credentials=creds)
     except Exception as e:
-        print(f"行事曆服務初始化失敗: {e}")
+        st.error(f"行事曆初始化發生內部錯誤，詳細原因：{str(e)}") 
         return None
 
 def add_diary_to_calendar(date_str, content):
